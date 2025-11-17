@@ -84,6 +84,17 @@ def get_lyrics_from_genius(artist: str, title: str) -> Optional[str]:
             all_lyrics.append(text)
         
         lyrics = "\n".join(all_lyrics)
+        
+        # Clean up common Genius metadata patterns
+        # Remove lines that look like "XX ContributorsDate La Vuelta Lyrics..."
+        lines = lyrics.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            # Skip lines that start with numbers followed by "Contributors" or "Lyrics"
+            if not (line and line[0].isdigit() and ('Contributors' in line or 'Letra de' in line or 'Lyrics' in line)):
+                cleaned_lines.append(line)
+        
+        lyrics = '\n'.join(cleaned_lines)
         return lyrics
     
     except Exception as e:
@@ -168,28 +179,28 @@ def translate_fallback(text: str) -> str:
 
 def align_words(spanish_text: str, english_text: str) -> List[WordAlignment]:
     """
-    Align Spanish and English words for side-by-side comparison.
-    This is a simple implementation; for production, consider using
-    more advanced alignment algorithms or translation APIs that support it.
+    Align Spanish and English lines for accurate comparison.
+    Uses line-by-line alignment instead of word-by-word for much better accuracy.
     """
     try:
-        spanish_words = re.findall(r'\b\w+\b', spanish_text.lower())
-        english_words = re.findall(r'\b\w+\b', english_text.lower())
+        spanish_lines = [line.strip() for line in spanish_text.split('\n') if line.strip()]
+        english_lines = [line.strip() for line in english_text.split('\n') if line.strip()]
         
-        # Simple alignment: pair up words as much as possible
-        # For better results, use a library like 'align' or translation API word-level data
+        # Pair up lines - this is much more accurate than word-by-word
         pairs = []
-        min_length = min(len(spanish_words), len(english_words))
+        min_length = min(len(spanish_lines), len(english_lines))
         
         for i in range(min_length):
-            pairs.append(WordAlignment(
-                spanish=spanish_words[i],
-                english=english_words[i]
-            ))
+            # Only add non-empty line pairs
+            if spanish_lines[i] and english_lines[i]:
+                pairs.append(WordAlignment(
+                    spanish=spanish_lines[i],
+                    english=english_lines[i]
+                ))
         
         return pairs
     except Exception as e:
-        print(f"Error aligning words: {e}")
+        print(f"Error aligning lines: {e}")
         return []
 
 def get_spotify_audio_url(artist: str, title: str) -> Optional[str]:
