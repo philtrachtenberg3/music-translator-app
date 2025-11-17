@@ -23,7 +23,7 @@ A full-stack web application for translating Spanish song lyrics to English with
 
 **Backend:**
 - Python FastAPI
-- Genius API (lyrics)
+- Genius API (lyrics) (Google Translate to start)
 - DeepL API (translation, or MyMemory fallback)
 - Spotify API (audio playback)
 
