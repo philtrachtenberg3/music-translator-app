@@ -37,10 +37,16 @@ class WordAlignment(BaseModel):
     spanish: str
     english: str
 
+class WordTranslation(BaseModel):
+    word: str
+    translation: str
+    line_index: int
+
 class TranslationResponse(BaseModel):
     spanish_lyrics: str
     english_lyrics: str
     word_pairs: List[WordAlignment]
+    word_translations: List[WordTranslation]
     audio_url: Optional[str] = None
 
 def get_lyrics_from_genius(artist: str, title: str) -> Optional[str]:
@@ -94,7 +100,7 @@ def get_lyrics_from_genius(artist: str, title: str) -> Optional[str]:
             if not (line and line[0].isdigit() and ('Contributors' in line or 'Letra de' in line or 'Lyrics' in line)):
                 cleaned_lines.append(line)
         
-        lyrics = '\n'.join(cleaned_lines)
+        lyrics = '\n'.join(cleaned_lines).strip()
         return lyrics
     
     except Exception as e:
@@ -176,6 +182,46 @@ def translate_fallback(text: str) -> str:
     except Exception as e:
         print(f"[FALLBACK] Error: {e}")
         return text
+
+def create_word_translations(spanish_text: str, english_text: str) -> List[WordTranslation]:
+    """
+    Create word-level translations by aligning Spanish and English lines.
+    Returns a list mapping each Spanish word to its English translation.
+    """
+    try:
+        spanish_lines = spanish_text.split('\n')
+        english_lines = english_text.split('\n')
+        
+        word_translations = []
+        
+        # Process each line pair
+        for line_idx, (sp_line, en_line) in enumerate(zip(spanish_lines, english_lines)):
+            sp_line = sp_line.strip()
+            en_line = en_line.strip()
+            
+            if not sp_line or not en_line:
+                continue
+            
+            # Split into words
+            sp_words = re.findall(r'\b\w+\b', sp_line.lower())
+            en_words = re.findall(r'\b\w+\b', en_line.lower())
+            
+            # Simple alignment: pair words in order
+            # This works reasonably well for most cases
+            min_len = min(len(sp_words), len(en_words))
+            
+            for i in range(min_len):
+                word_translations.append(WordTranslation(
+                    word=sp_words[i],
+                    translation=en_words[i],
+                    line_index=line_idx
+                ))
+        
+        return word_translations
+    
+    except Exception as e:
+        print(f"Error creating word translations: {e}")
+        return []
 
 def align_words(spanish_text: str, english_text: str) -> List[WordAlignment]:
     """
@@ -263,8 +309,11 @@ def translate_song(request: SongRequest):
         # Translate to English
         english_lyrics = translate_with_deepl(spanish_lyrics)
         
-        # Align words
+        # Align lines
         word_pairs = align_words(spanish_lyrics, english_lyrics)
+        
+        # Create word-level translations
+        word_translations = create_word_translations(spanish_lyrics, english_lyrics)
         
         # Get Spotify audio URL
         audio_url = get_spotify_audio_url(request.artist, request.title)
@@ -273,6 +322,7 @@ def translate_song(request: SongRequest):
             spanish_lyrics=spanish_lyrics,
             english_lyrics=english_lyrics,
             word_pairs=word_pairs,
+            word_translations=word_translations,
             audio_url=audio_url
         )
     
@@ -296,13 +346,17 @@ def translate_text(request: TranslationRequest):
         # Translate to English
         english_text = translate_with_deepl(spanish_text)
         
-        # Align words
+        # Align lines
         word_pairs = align_words(spanish_text, english_text)
+        
+        # Create word-level translations
+        word_translations = create_word_translations(spanish_text, english_text)
         
         return {
             "spanish_lyrics": spanish_text,
             "english_lyrics": english_text,
-            "word_pairs": word_pairs
+            "word_pairs": word_pairs,
+            "word_translations": word_translations
         }
     
     except HTTPException:
