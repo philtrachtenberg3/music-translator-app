@@ -9,7 +9,8 @@ function App() {
   
   const [spanishLyrics, setSpanishLyrics] = useState('');
   const [englishLyrics, setEnglishLyrics] = useState('');
-  const [wordPairs, setWordPairs] = useState([]);
+  const [wordPairs, setWordPairs] = useState([]); // line-by-line pairs
+  const [wordTranslations, setWordTranslations] = useState([]); // word-by-word translations
   const [audioUrl, setAudioUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -43,6 +44,7 @@ function App() {
       setSpanishLyrics(data.spanish_lyrics);
       setEnglishLyrics(data.english_lyrics);
       setWordPairs(data.word_pairs);
+      setWordTranslations(data.word_translations);
       setAudioUrl(data.audio_url);
     } catch (err) {
       setError(`Error: ${err.message}`);
@@ -77,6 +79,7 @@ function App() {
       setSpanishLyrics(data.spanish_lyrics);
       setEnglishLyrics(data.english_lyrics);
       setWordPairs(data.word_pairs);
+      setWordTranslations(data.word_translations);
       setAudioUrl(null);
     } catch (err) {
       setError(`Error: ${err.message}`);
@@ -89,14 +92,40 @@ function App() {
     setSpanishLyrics('');
     setEnglishLyrics('');
     setWordPairs([]);
+    setWordTranslations([]);
     setAudioUrl(null);
     setError('');
   };
 
-  // Split lyrics into lines for side-by-side display
+  // Helper function to create word spans with translations
+  const createWordSpans = (line, lineIndex) => {
+    if (!line.trim()) return <span className="empty-line">&nbsp;</span>;
+    
+    const words = line.split(/(\s+)/); // Split on whitespace but keep spaces
+    const lineTranslations = wordTranslations.filter(wt => wt.line_index === lineIndex);
+    
+    return words.map((word, idx) => {
+      if (!word.trim()) return word; // Return whitespace as-is
+      
+      const lowerWord = word.toLowerCase().replace(/[^\w]/g, '');
+      const translation = lineTranslations.find(
+        wt => wt.word === lowerWord
+      );
+      
+      if (translation) {
+        return (
+          <span key={idx} className="word-with-translation" title={translation.translation}>
+            {word}
+          </span>
+        );
+      }
+      return word;
+    });
+  };
+
+  // Split into lines for display
   const spanishLines = spanishLyrics.split('\n');
   const englishLines = englishLyrics.split('\n');
-  const maxLines = Math.max(spanishLines.length, englishLines.length);
 
   return (
     <div className="app">
@@ -189,7 +218,7 @@ function App() {
                 <div className="lyrics-content">
                   {spanishLines.map((line, idx) => (
                     <div key={idx} className="lyrics-line">
-                      {line || <span className="empty-line">&nbsp;</span>}
+                      {createWordSpans(line, idx)}
                     </div>
                   ))}
                 </div>
@@ -200,23 +229,28 @@ function App() {
                 <div className="lyrics-content">
                   {englishLines.map((line, idx) => (
                     <div key={idx} className="lyrics-line">
-                      {line || <span className="empty-line">&nbsp;</span>}
+                      {createWordSpans(line, idx)}
                     </div>
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* Word-by-Word Alignment */}
+            {/* Line-by-Line Alignment */}
             {wordPairs.length > 0 && (
               <div className="word-alignment">
-                <h3>📖 Word-by-Word Translation</h3>
-                <div className="word-pairs-grid">
+                <h3>📖 Line-by-Line Translation</h3>
+                <div className="line-pairs-container">
                   {wordPairs.map((pair, idx) => (
-                    <div key={idx} className="word-pair">
-                      <div className="spanish-word">{pair.spanish}</div>
-                      <div className="arrow">→</div>
-                      <div className="english-word">{pair.english}</div>
+                    <div key={idx} className="line-pair">
+                      <div className="line-pair-spanish">
+                        <strong>Spanish:</strong>
+                        <p>{pair.spanish}</p>
+                      </div>
+                      <div className="line-pair-english">
+                        <strong>English:</strong>
+                        <p>{pair.english}</p>
+                      </div>
                     </div>
                   ))}
                 </div>
