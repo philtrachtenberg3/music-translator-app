@@ -74,7 +74,16 @@ def get_lyrics_from_genius(artist: str, title: str) -> Optional[str]:
         if not lyrics_divs:
             return None
         
-        lyrics = "\n".join([div.get_text() for div in lyrics_divs])
+        # Extract lyrics while preserving line breaks
+        all_lyrics = []
+        for div in lyrics_divs:
+            # Get text and preserve line breaks from <br> tags
+            for br in div.find_all('br'):
+                br.replace_with('\n')
+            text = div.get_text()
+            all_lyrics.append(text)
+        
+        lyrics = "\n".join(all_lyrics)
         return lyrics
     
     except Exception as e:
