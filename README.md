@@ -12,6 +12,13 @@ A full-stack web application for translating Spanish song lyrics to English with
 - 📋 Paste and translate manual lyrics
 - 🎨 Beautiful, responsive UI
 
+## Setup
+
+1. Clone the repo
+2. Copy `.env.example` to `.env`
+3. Add your API keys to `.env`
+4. Follow the QUICKSTART.md
+
 ## Tech Stack
 
 **Backend:**
