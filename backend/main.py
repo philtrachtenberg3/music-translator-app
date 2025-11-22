@@ -37,15 +37,10 @@ class WordAlignment(BaseModel):
     spanish: str
     english: str
 
-class VocabularyItem(BaseModel):
-    spanish: str
-    english: str
-
 class TranslationResponse(BaseModel):
     spanish_lyrics: str
     english_lyrics: str
     word_pairs: List[WordAlignment]
-    vocabulary: List[VocabularyItem]
     audio_url: Optional[str] = None
 
 def get_lyrics_from_genius(artist: str, title: str) -> Optional[str]:
@@ -182,49 +177,6 @@ def translate_fallback(text: str) -> str:
         print(f"[FALLBACK] Error: {e}")
         return text
 
-def extract_vocabulary(spanish_text: str, english_text: str) -> List[VocabularyItem]:
-    """
-    Extract unique Spanish words and pair them with their English translations
-    from the already-translated full text. Much more efficient!
-    """
-    try:
-        # Split into lines
-        spanish_lines = spanish_text.split('\n')
-        english_lines = english_text.split('\n')
-        
-        # Build a vocabulary by matching lines
-        vocab_dict = {}
-        
-        for sp_line, en_line in zip(spanish_lines, english_lines):
-            sp_line = sp_line.strip()
-            en_line = en_line.strip()
-            
-            if not sp_line or not en_line:
-                continue
-            
-            # Extract words from Spanish line
-            sp_words = re.findall(r'\b[a-záéíóúñ]+\b', sp_line.lower())
-            en_words = re.findall(r'\b[a-z]+\b', en_line.lower())
-            
-            # Simple pairing: match words in order for this line
-            for i, sp_word in enumerate(sp_words):
-                # Skip short words and avoid duplicates
-                if len(sp_word) > 2 and sp_word not in vocab_dict:
-                    if i < len(en_words):
-                        vocab_dict[sp_word] = en_words[i]
-        
-        # Convert to list of VocabularyItems, limiting to 30 words
-        vocab = [
-            VocabularyItem(spanish=word, english=translation)
-            for word, translation in list(vocab_dict.items())[:30]
-        ]
-        
-        return vocab
-    
-    except Exception as e:
-        print(f"Error extracting vocabulary: {e}")
-        return []
-
 def align_words(spanish_text: str, english_text: str) -> List[WordAlignment]:
     """
     Align Spanish and English lines for accurate comparison.
@@ -314,9 +266,6 @@ def translate_song(request: SongRequest):
         # Align lines
         word_pairs = align_words(spanish_lyrics, english_lyrics)
         
-        # Extract vocabulary
-        vocabulary = extract_vocabulary(spanish_lyrics, english_lyrics)
-        
         # Get Spotify audio URL
         audio_url = get_spotify_audio_url(request.artist, request.title)
         
@@ -324,7 +273,6 @@ def translate_song(request: SongRequest):
             spanish_lyrics=spanish_lyrics,
             english_lyrics=english_lyrics,
             word_pairs=word_pairs,
-            vocabulary=vocabulary,
             audio_url=audio_url
         )
     
@@ -351,14 +299,10 @@ def translate_text(request: TranslationRequest):
         # Align lines
         word_pairs = align_words(spanish_text, english_text)
         
-        # Extract vocabulary
-        vocabulary = extract_vocabulary(spanish_text, english_text)
-        
         return {
             "spanish_lyrics": spanish_text,
             "english_lyrics": english_text,
-            "word_pairs": word_pairs,
-            "vocabulary": vocabulary
+            "word_pairs": word_pairs
         }
     
     except HTTPException:

@@ -204,7 +204,28 @@ body {
   gap: 12px;
   max-height: 600px;
   overflow-y: auto;
+}
+
+/* Spanish column: scrollbar on LEFT */
+.lyrics-column:first-child .lyrics-content {
+  direction: rtl;
+  padding-right: 0;
+  padding-left: 10px;
+}
+
+.lyrics-column:first-child .lyrics-line {
+  direction: ltr;
+}
+
+/* English column: hide scrollbar */
+.lyrics-column:last-child .lyrics-content {
+  overflow-y: scroll;
+  scrollbar-width: none; /* Firefox */
   padding-right: 10px;
+}
+
+.lyrics-column:last-child .lyrics-content::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
 }
 
 .lyrics-line {
@@ -224,76 +245,6 @@ body {
 .empty-line {
   display: inline-block;
   min-height: 1em;
-}
-
-/* Vocabulary Section */
-.vocabulary {
-  background: white;
-  border-radius: 12px;
-  padding: 30px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-}
-
-.vocabulary h3 {
-  color: #667eea;
-  margin-bottom: 8px;
-  font-size: 1.2em;
-}
-
-.vocab-subtitle {
-  color: #999;
-  font-size: 0.9em;
-  margin-bottom: 20px;
-}
-
-.vocabulary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-}
-
-.vocab-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border-left: 3px solid #667eea;
-  transition: all 0.3s;
-}
-
-.vocab-item:hover {
-  background: #eff1f7;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
-}
-
-.vocab-spanish {
-  flex: 1;
-  font-weight: 600;
-  color: #333;
-  text-align: right;
-  font-family: 'Courier New', monospace;
-  font-size: 0.95em;
-}
-
-.vocab-arrow {
-  color: #667eea;
-  font-weight: bold;
-}
-
-.vocab-english {
-  flex: 1;
-  color: #555;
-  font-family: 'Courier New', monospace;
-  font-size: 0.95em;
-}
-
-@media (max-width: 768px) {
-  .vocabulary-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  }
 }
 
 /* Buttons */

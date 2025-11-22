@@ -9,8 +9,6 @@ function App() {
   
   const [spanishLyrics, setSpanishLyrics] = useState('');
   const [englishLyrics, setEnglishLyrics] = useState('');
-  const [wordPairs, setWordPairs] = useState([]); // line-by-line pairs
-  const [vocabulary, setVocabulary] = useState([]); // unique vocabulary
   const [audioUrl, setAudioUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -67,8 +65,6 @@ function App() {
       const data = await response.json();
       setSpanishLyrics(data.spanish_lyrics);
       setEnglishLyrics(data.english_lyrics);
-      setWordPairs(data.word_pairs);
-      setVocabulary(data.vocabulary);
       setAudioUrl(data.audio_url);
     } catch (err) {
       setError(`Error: ${err.message}`);
@@ -102,8 +98,6 @@ function App() {
       const data = await response.json();
       setSpanishLyrics(data.spanish_lyrics);
       setEnglishLyrics(data.english_lyrics);
-      setWordPairs(data.word_pairs);
-      setVocabulary(data.vocabulary);
       setAudioUrl(null);
     } catch (err) {
       setError(`Error: ${err.message}`);
@@ -115,8 +109,6 @@ function App() {
   const clearResults = () => {
     setSpanishLyrics('');
     setEnglishLyrics('');
-    setWordPairs([]);
-    setVocabulary([]);
     setAudioUrl(null);
     setError('');
   };
@@ -233,23 +225,6 @@ function App() {
                 </div>
               </div>
             </div>
-
-            {/* Vocabulary Section */}
-            {vocabulary.length > 0 && (
-              <div className="vocabulary">
-                <h3>📚 Vocabulary Builder</h3>
-                <p className="vocab-subtitle">Key words from the song</p>
-                <div className="vocabulary-grid">
-                  {vocabulary.map((item, idx) => (
-                    <div key={idx} className="vocab-item">
-                      <div className="vocab-spanish">{item.spanish}</div>
-                      <div className="vocab-arrow">→</div>
-                      <div className="vocab-english">{item.english}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <button onClick={clearResults} className="btn-clear">
               Clear Results
