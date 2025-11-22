@@ -37,16 +37,15 @@ class WordAlignment(BaseModel):
     spanish: str
     english: str
 
-class WordTranslation(BaseModel):
-    word: str
-    translation: str
-    line_index: int
+class VocabularyItem(BaseModel):
+    spanish: str
+    english: str
 
 class TranslationResponse(BaseModel):
     spanish_lyrics: str
     english_lyrics: str
     word_pairs: List[WordAlignment]
-    word_translations: List[WordTranslation]
+    vocabulary: List[VocabularyItem]
     audio_url: Optional[str] = None
 
 def get_lyrics_from_genius(artist: str, title: str) -> Optional[str]:
@@ -183,44 +182,47 @@ def translate_fallback(text: str) -> str:
         print(f"[FALLBACK] Error: {e}")
         return text
 
-def create_word_translations(spanish_text: str, english_text: str) -> List[WordTranslation]:
+def extract_vocabulary(spanish_text: str, english_text: str) -> List[VocabularyItem]:
     """
-    Create word-level translations by aligning Spanish and English lines.
-    Returns a list mapping each Spanish word to its English translation.
+    Extract unique Spanish words and pair them with their English translations
+    from the already-translated full text. Much more efficient!
     """
     try:
+        # Split into lines
         spanish_lines = spanish_text.split('\n')
         english_lines = english_text.split('\n')
         
-        word_translations = []
+        # Build a vocabulary by matching lines
+        vocab_dict = {}
         
-        # Process each line pair
-        for line_idx, (sp_line, en_line) in enumerate(zip(spanish_lines, english_lines)):
+        for sp_line, en_line in zip(spanish_lines, english_lines):
             sp_line = sp_line.strip()
             en_line = en_line.strip()
             
             if not sp_line or not en_line:
                 continue
             
-            # Split into words
-            sp_words = re.findall(r'\b\w+\b', sp_line.lower())
-            en_words = re.findall(r'\b\w+\b', en_line.lower())
+            # Extract words from Spanish line
+            sp_words = re.findall(r'\b[a-záéíóúñ]+\b', sp_line.lower())
+            en_words = re.findall(r'\b[a-z]+\b', en_line.lower())
             
-            # Simple alignment: pair words in order
-            # This works reasonably well for most cases
-            min_len = min(len(sp_words), len(en_words))
-            
-            for i in range(min_len):
-                word_translations.append(WordTranslation(
-                    word=sp_words[i],
-                    translation=en_words[i],
-                    line_index=line_idx
-                ))
+            # Simple pairing: match words in order for this line
+            for i, sp_word in enumerate(sp_words):
+                # Skip short words and avoid duplicates
+                if len(sp_word) > 2 and sp_word not in vocab_dict:
+                    if i < len(en_words):
+                        vocab_dict[sp_word] = en_words[i]
         
-        return word_translations
+        # Convert to list of VocabularyItems, limiting to 30 words
+        vocab = [
+            VocabularyItem(spanish=word, english=translation)
+            for word, translation in list(vocab_dict.items())[:30]
+        ]
+        
+        return vocab
     
     except Exception as e:
-        print(f"Error creating word translations: {e}")
+        print(f"Error extracting vocabulary: {e}")
         return []
 
 def align_words(spanish_text: str, english_text: str) -> List[WordAlignment]:
@@ -312,8 +314,8 @@ def translate_song(request: SongRequest):
         # Align lines
         word_pairs = align_words(spanish_lyrics, english_lyrics)
         
-        # Create word-level translations
-        word_translations = create_word_translations(spanish_lyrics, english_lyrics)
+        # Extract vocabulary
+        vocabulary = extract_vocabulary(spanish_lyrics, english_lyrics)
         
         # Get Spotify audio URL
         audio_url = get_spotify_audio_url(request.artist, request.title)
@@ -322,7 +324,7 @@ def translate_song(request: SongRequest):
             spanish_lyrics=spanish_lyrics,
             english_lyrics=english_lyrics,
             word_pairs=word_pairs,
-            word_translations=word_translations,
+            vocabulary=vocabulary,
             audio_url=audio_url
         )
     
@@ -349,14 +351,14 @@ def translate_text(request: TranslationRequest):
         # Align lines
         word_pairs = align_words(spanish_text, english_text)
         
-        # Create word-level translations
-        word_translations = create_word_translations(spanish_text, english_text)
+        # Extract vocabulary
+        vocabulary = extract_vocabulary(spanish_text, english_text)
         
         return {
             "spanish_lyrics": spanish_text,
             "english_lyrics": english_text,
             "word_pairs": word_pairs,
-            "word_translations": word_translations
+            "vocabulary": vocabulary
         }
     
     except HTTPException:

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 
 function App() {
@@ -10,12 +10,36 @@ function App() {
   const [spanishLyrics, setSpanishLyrics] = useState('');
   const [englishLyrics, setEnglishLyrics] = useState('');
   const [wordPairs, setWordPairs] = useState([]); // line-by-line pairs
-  const [wordTranslations, setWordTranslations] = useState([]); // word-by-word translations
+  const [vocabulary, setVocabulary] = useState([]); // unique vocabulary
   const [audioUrl, setAudioUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Refs for synced scrolling
+  const spanishColRef = useRef(null);
+  const englishColRef = useRef(null);
 
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+  // Synced scrolling effect
+  useEffect(() => {
+    const spanishCol = spanishColRef.current;
+    const englishCol = englishColRef.current;
+    
+    if (!spanishCol || !englishCol) return;
+    
+    const handleScroll = (source, target) => {
+      target.scrollTop = source.scrollTop;
+    };
+    
+    spanishCol.addEventListener('scroll', () => handleScroll(spanishCol, englishCol));
+    englishCol.addEventListener('scroll', () => handleScroll(englishCol, spanishCol));
+    
+    return () => {
+      spanishCol.removeEventListener('scroll', () => handleScroll(spanishCol, englishCol));
+      englishCol.removeEventListener('scroll', () => handleScroll(englishCol, spanishCol));
+    };
+  }, [spanishLyrics, englishLyrics]);
 
   const handleSearchSong = async (e) => {
     e.preventDefault();
@@ -44,7 +68,7 @@ function App() {
       setSpanishLyrics(data.spanish_lyrics);
       setEnglishLyrics(data.english_lyrics);
       setWordPairs(data.word_pairs);
-      setWordTranslations(data.word_translations);
+      setVocabulary(data.vocabulary);
       setAudioUrl(data.audio_url);
     } catch (err) {
       setError(`Error: ${err.message}`);
@@ -79,7 +103,7 @@ function App() {
       setSpanishLyrics(data.spanish_lyrics);
       setEnglishLyrics(data.english_lyrics);
       setWordPairs(data.word_pairs);
-      setWordTranslations(data.word_translations);
+      setVocabulary(data.vocabulary);
       setAudioUrl(null);
     } catch (err) {
       setError(`Error: ${err.message}`);
@@ -92,35 +116,9 @@ function App() {
     setSpanishLyrics('');
     setEnglishLyrics('');
     setWordPairs([]);
-    setWordTranslations([]);
+    setVocabulary([]);
     setAudioUrl(null);
     setError('');
-  };
-
-  // Helper function to create word spans with translations
-  const createWordSpans = (line, lineIndex) => {
-    if (!line.trim()) return <span className="empty-line">&nbsp;</span>;
-    
-    const words = line.split(/(\s+)/); // Split on whitespace but keep spaces
-    const lineTranslations = wordTranslations.filter(wt => wt.line_index === lineIndex);
-    
-    return words.map((word, idx) => {
-      if (!word.trim()) return word; // Return whitespace as-is
-      
-      const lowerWord = word.toLowerCase().replace(/[^\w]/g, '');
-      const translation = lineTranslations.find(
-        wt => wt.word === lowerWord
-      );
-      
-      if (translation) {
-        return (
-          <span key={idx} className="word-with-translation" title={translation.translation}>
-            {word}
-          </span>
-        );
-      }
-      return word;
-    });
   };
 
   // Split into lines for display
@@ -215,10 +213,10 @@ function App() {
             <div className="lyrics-comparison">
               <div className="lyrics-column">
                 <h3>Spanish</h3>
-                <div className="lyrics-content">
+                <div className="lyrics-content" ref={spanishColRef}>
                   {spanishLines.map((line, idx) => (
                     <div key={idx} className="lyrics-line">
-                      {createWordSpans(line, idx)}
+                      {line || <span className="empty-line">&nbsp;</span>}
                     </div>
                   ))}
                 </div>
@@ -226,31 +224,27 @@ function App() {
 
               <div className="lyrics-column">
                 <h3>English</h3>
-                <div className="lyrics-content">
+                <div className="lyrics-content" ref={englishColRef}>
                   {englishLines.map((line, idx) => (
                     <div key={idx} className="lyrics-line">
-                      {createWordSpans(line, idx)}
+                      {line || <span className="empty-line">&nbsp;</span>}
                     </div>
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* Line-by-Line Alignment */}
-            {wordPairs.length > 0 && (
-              <div className="word-alignment">
-                <h3>📖 Line-by-Line Translation</h3>
-                <div className="line-pairs-container">
-                  {wordPairs.map((pair, idx) => (
-                    <div key={idx} className="line-pair">
-                      <div className="line-pair-spanish">
-                        <strong>Spanish:</strong>
-                        <p>{pair.spanish}</p>
-                      </div>
-                      <div className="line-pair-english">
-                        <strong>English:</strong>
-                        <p>{pair.english}</p>
-                      </div>
+            {/* Vocabulary Section */}
+            {vocabulary.length > 0 && (
+              <div className="vocabulary">
+                <h3>📚 Vocabulary Builder</h3>
+                <p className="vocab-subtitle">Key words from the song</p>
+                <div className="vocabulary-grid">
+                  {vocabulary.map((item, idx) => (
+                    <div key={idx} className="vocab-item">
+                      <div className="vocab-spanish">{item.spanish}</div>
+                      <div className="vocab-arrow">→</div>
+                      <div className="vocab-english">{item.english}</div>
                     </div>
                   ))}
                 </div>
