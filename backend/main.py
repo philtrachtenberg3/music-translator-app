@@ -29,9 +29,13 @@ SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 class SongRequest(BaseModel):
     artist: str
     title: str
+    source_language: str = "ES"  # Default to Spanish
+    target_language: str = "EN-US"  # Default to English
 
 class TranslationRequest(BaseModel):
     spanish_text: str
+    source_language: str = "ES"  # Default to Spanish
+    target_language: str = "EN-US"  # Default to English
 
 class WordAlignment(BaseModel):
     spanish: str
@@ -60,8 +64,11 @@ def get_lyrics_from_genius(artist: str, title: str) -> Optional[str]:
         # Get the first matching song
         song_url = data["response"]["hits"][0]["result"]["url"]
         
-        # Fetch the lyrics page
-        page_response = requests.get(song_url, timeout=10)
+        # Fetch the lyrics page with User-Agent to avoid 403 blocking
+        page_headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        page_response = requests.get(song_url, headers=page_headers, timeout=10)
         page_response.raise_for_status()
         
         # Parse HTML to extract lyrics
@@ -106,7 +113,7 @@ def translate_with_deepl(text: str, source_lang: str = "ES", target_lang: str = 
     try:
         if not DEEPL_API_KEY:
             print("DeepL API key not set, using fallback translation")
-            return translate_fallback(text)
+            return translate_fallback(text, source_lang, target_lang)
         
         url = "https://api-free.deepl.com/v1/translate"
         
@@ -121,7 +128,7 @@ def translate_with_deepl(text: str, source_lang: str = "ES", target_lang: str = 
         
         if response.status_code == 403:
             print("DeepL API key invalid or unauthorized. Using fallback translation.")
-            return translate_fallback(text)
+            return translate_fallback(text, source_lang, target_lang)
         
         response.raise_for_status()
         data = response.json()
@@ -132,18 +139,35 @@ def translate_with_deepl(text: str, source_lang: str = "ES", target_lang: str = 
         print(f"Error with DeepL translation: {e}")
         print("Using fallback translation service...")
         # Fallback to simple translation
-        return translate_fallback(text)
+        return translate_fallback(text, source_lang, target_lang)
 
-def translate_fallback(text: str) -> str:
+def translate_fallback(text: str, source_lang: str = "ES", target_lang: str = "EN-US") -> str:
     """Fallback translation using Google Translate free API"""
     try:
         print(f"[FALLBACK] Using Google Translate free API...")
         
-        # Use Google Translate free endpoint
-        from urllib.parse import quote
-        url = f"https://translate.googleapis.com/translate_a/element.js?cb=googleTranslateElementInit"
+        # Map DeepL language codes to Google Translate codes
+        lang_map = {
+            'ES': 'es',
+            'EN-US': 'en',
+            'EN': 'en',
+            'PT-BR': 'pt',
+            'PT': 'pt',
+            'FR': 'fr',
+            'DE': 'de',
+            'IT': 'it',
+            'NL': 'nl',
+            'PL': 'pl',
+            'RU': 'ru',
+            'JA': 'ja',
+            'ZH': 'zh-CN',
+            'KO': 'ko',
+            'TR': 'tr',
+        }
         
-        # Try a simpler approach with requests
+        source = lang_map.get(source_lang, 'es')
+        target = lang_map.get(target_lang, 'en')
+        
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
@@ -151,8 +175,8 @@ def translate_fallback(text: str) -> str:
         # Use the free Google Translate API
         params = {
             'client': 'gtx',
-            'sl': 'es',
-            'tl': 'en',
+            'sl': source,
+            'tl': target,
             'dt': 't',
             'q': text
         }
@@ -251,7 +275,7 @@ def read_root():
 @app.post("/translate-song", response_model=TranslationResponse)
 def translate_song(request: SongRequest):
     """
-    Main endpoint: fetch lyrics and translate them
+    Main endpoint: fetch lyrics and translate them to selected language
     """
     try:
         # Fetch lyrics from Genius
@@ -260,18 +284,18 @@ def translate_song(request: SongRequest):
         if not spanish_lyrics:
             raise HTTPException(status_code=404, detail="Lyrics not found on Genius")
         
-        # Translate to English
-        english_lyrics = translate_with_deepl(spanish_lyrics)
+        # Translate to selected target language from source language
+        translated_lyrics = translate_with_deepl(spanish_lyrics, source_lang=request.source_language, target_lang=request.target_language)
         
         # Align lines
-        word_pairs = align_words(spanish_lyrics, english_lyrics)
+        word_pairs = align_words(spanish_lyrics, translated_lyrics)
         
         # Get Spotify audio URL
         audio_url = get_spotify_audio_url(request.artist, request.title)
         
         return TranslationResponse(
             spanish_lyrics=spanish_lyrics,
-            english_lyrics=english_lyrics,
+            english_lyrics=translated_lyrics,
             word_pairs=word_pairs,
             audio_url=audio_url
         )
@@ -285,7 +309,7 @@ def translate_song(request: SongRequest):
 @app.post("/translate-text")
 def translate_text(request: TranslationRequest):
     """
-    Translate manually pasted Spanish text
+    Translate manually pasted Spanish text to selected language
     """
     try:
         spanish_text = request.spanish_text
@@ -293,15 +317,15 @@ def translate_text(request: TranslationRequest):
         if not spanish_text:
             raise HTTPException(status_code=400, detail="Spanish text is required")
         
-        # Translate to English
-        english_text = translate_with_deepl(spanish_text)
+        # Translate to selected target language from source language
+        translated_text = translate_with_deepl(spanish_text, source_lang=request.source_language, target_lang=request.target_language)
         
         # Align lines
-        word_pairs = align_words(spanish_text, english_text)
+        word_pairs = align_words(spanish_text, translated_text)
         
         return {
             "spanish_lyrics": spanish_text,
-            "english_lyrics": english_text,
+            "english_lyrics": translated_text,
             "word_pairs": word_pairs
         }
     

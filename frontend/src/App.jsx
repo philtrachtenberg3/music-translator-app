@@ -6,6 +6,8 @@ function App() {
   const [artist, setArtist] = useState('');
   const [title, setTitle] = useState('');
   const [manualSpanish, setManualSpanish] = useState('');
+  const [sourceLanguage, setSourceLanguage] = useState('ES');
+  const [targetLanguage, setTargetLanguage] = useState('EN-US');
   
   const [spanishLyrics, setSpanishLyrics] = useState('');
   const [englishLyrics, setEnglishLyrics] = useState('');
@@ -54,7 +56,7 @@ function App() {
       const response = await fetch(`${API_BASE_URL}/translate-song`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ artist, title }),
+        body: JSON.stringify({ artist, title, source_language: sourceLanguage, target_language: targetLanguage }),
       });
 
       if (!response.ok) {
@@ -88,7 +90,7 @@ function App() {
       const response = await fetch(`${API_BASE_URL}/translate-text`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spanish_text: manualSpanish }),
+        body: JSON.stringify({ spanish_text: manualSpanish, source_language: sourceLanguage, target_language: targetLanguage }),
       });
 
       if (!response.ok) {
@@ -117,11 +119,32 @@ function App() {
   const spanishLines = spanishLyrics.split('\n');
   const englishLines = englishLyrics.split('\n');
 
+  const getLanguageName = (code) => {
+    const languages = {
+      'ES': 'Spanish',
+      'EN-US': 'English',
+      'EN': 'English',
+      'PT-BR': 'Portuguese',
+      'PT': 'Portuguese (PT)',
+      'FR': 'French',
+      'DE': 'German',
+      'IT': 'Italian',
+      'NL': 'Dutch',
+      'PL': 'Polish',
+      'RU': 'Russian',
+      'JA': 'Japanese',
+      'ZH': 'Chinese',
+      'KO': 'Korean',
+      'TR': 'Turkish',
+    };
+    return languages[code] || 'another language';
+  };
+
   return (
     <div className="app">
       <header className="app-header">
         <h1>🎵 Music Translator</h1>
-        <p className="subtitle">Translate Spanish lyrics to English</p>
+        <p className="subtitle">Translate {getLanguageName(sourceLanguage)} to {getLanguageName(targetLanguage)}</p>
       </header>
 
       <div className="container">
@@ -140,6 +163,59 @@ function App() {
             >
               Paste Lyrics
             </button>
+          </div>
+
+          {/* Language Selection */}
+          <div className="language-selectors">
+            <div className="language-selector">
+              <label htmlFor="source-lang">From:</label>
+              <select 
+                id="source-lang"
+                value={sourceLanguage} 
+                onChange={(e) => setSourceLanguage(e.target.value)}
+                disabled={loading}
+              >
+                <option value="ES">Spanish</option>
+                <option value="EN-US">English (US)</option>
+                <option value="PT-BR">Portuguese (Brazil)</option>
+                <option value="PT">Portuguese (Portugal)</option>
+                <option value="FR">French</option>
+                <option value="DE">German</option>
+                <option value="IT">Italian</option>
+                <option value="NL">Dutch</option>
+                <option value="PL">Polish</option>
+                <option value="RU">Russian</option>
+                <option value="JA">Japanese</option>
+                <option value="ZH">Chinese</option>
+                <option value="KO">Korean</option>
+                <option value="TR">Turkish</option>
+              </select>
+            </div>
+
+            <div className="language-selector">
+              <label htmlFor="target-lang">To:</label>
+              <select 
+                id="target-lang"
+                value={targetLanguage} 
+                onChange={(e) => setTargetLanguage(e.target.value)}
+                disabled={loading}
+              >
+                <option value="EN-US">English (US)</option>
+                <option value="ES">Spanish</option>
+                <option value="PT-BR">Portuguese (Brazil)</option>
+                <option value="PT">Portuguese (Portugal)</option>
+                <option value="FR">French</option>
+                <option value="DE">German</option>
+                <option value="IT">Italian</option>
+                <option value="NL">Dutch</option>
+                <option value="PL">Polish</option>
+                <option value="RU">Russian</option>
+                <option value="JA">Japanese</option>
+                <option value="ZH">Chinese</option>
+                <option value="KO">Korean</option>
+                <option value="TR">Turkish</option>
+              </select>
+            </div>
           </div>
 
           {activeTab === 'search' && (
@@ -173,11 +249,11 @@ function App() {
           {activeTab === 'paste' && (
             <form onSubmit={handleTranslateManual} className="paste-form">
               <div className="form-group">
-                <label>Paste Spanish Lyrics</label>
+                <label>Paste {getLanguageName(sourceLanguage)} Lyrics</label>
                 <textarea
                   value={manualSpanish}
                   onChange={(e) => setManualSpanish(e.target.value)}
-                  placeholder="Paste your Spanish lyrics here..."
+                  placeholder={`Paste your ${getLanguageName(sourceLanguage).toLowerCase()} lyrics here...`}
                   rows="8"
                   disabled={loading}
                 />
@@ -204,7 +280,7 @@ function App() {
             {/* Lyrics Comparison */}
             <div className="lyrics-comparison">
               <div className="lyrics-column">
-                <h3>Spanish</h3>
+                <h3>{getLanguageName(sourceLanguage)}</h3>
                 <div className="lyrics-content" ref={spanishColRef}>
                   {spanishLines.map((line, idx) => (
                     <div key={idx} className="lyrics-line">
@@ -215,7 +291,7 @@ function App() {
               </div>
 
               <div className="lyrics-column">
-                <h3>English</h3>
+                <h3>{getLanguageName(targetLanguage)}</h3>
                 <div className="lyrics-content" ref={englishColRef}>
                   {englishLines.map((line, idx) => (
                     <div key={idx} className="lyrics-line">
