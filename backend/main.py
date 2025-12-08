@@ -45,7 +45,34 @@ class TranslationResponse(BaseModel):
     spanish_lyrics: str
     english_lyrics: str
     word_pairs: List[WordAlignment]
+    detected_language: str
     audio_url: Optional[str] = None
+
+def detect_language(text: str) -> str:
+    """
+    Detect if text is in Spanish or English based on common words.
+    Returns 'ES' or 'EN-US'
+    """
+    try:
+        text_lower = text.lower()
+        
+        # Common Spanish words
+        spanish_words = {'el', 'la', 'de', 'que', 'y', 'en', 'un', 'una', 'es', 'está', 'son', 'estar', 'me', 'te', 'se', 'más', 'como', 'para', 'con', 'pero', 'si', 'sí'}
+        
+        # Common English words
+        english_words = {'the', 'and', 'is', 'are', 'to', 'in', 'of', 'a', 'that', 'it', 'for', 'be', 'you', 'with', 'have', 'this', 'but', 'as', 'or', 'from'}
+        
+        # Count matches
+        spanish_count = len([word for word in spanish_words if word in text_lower])
+        english_count = len([word for word in english_words if word in text_lower])
+        
+        # Return the detected language
+        if english_count > spanish_count:
+            return 'EN-US'
+        else:
+            return 'ES'
+    except:
+        return 'ES'  # Default to Spanish
 
 def get_lyrics_from_genius(artist: str, title: str) -> Optional[str]:
     """Fetch lyrics from Genius API"""
@@ -275,7 +302,7 @@ def read_root():
 @app.post("/translate-song", response_model=TranslationResponse)
 def translate_song(request: SongRequest):
     """
-    Main endpoint: fetch lyrics and translate them to selected language
+    Main endpoint: fetch lyrics, auto-detect language, and translate them
     """
     try:
         # Fetch lyrics from Genius
@@ -284,8 +311,11 @@ def translate_song(request: SongRequest):
         if not spanish_lyrics:
             raise HTTPException(status_code=404, detail="Lyrics not found on Genius")
         
-        # Translate to selected target language from source language
-        translated_lyrics = translate_with_deepl(spanish_lyrics, source_lang=request.source_language, target_lang=request.target_language)
+        # Auto-detect the language of the lyrics
+        detected_lang = detect_language(spanish_lyrics)
+        
+        # Translate to selected target language from detected language
+        translated_lyrics = translate_with_deepl(spanish_lyrics, source_lang=detected_lang, target_lang=request.target_language)
         
         # Align lines
         word_pairs = align_words(spanish_lyrics, translated_lyrics)
@@ -297,6 +327,7 @@ def translate_song(request: SongRequest):
             spanish_lyrics=spanish_lyrics,
             english_lyrics=translated_lyrics,
             word_pairs=word_pairs,
+            detected_language=detected_lang,
             audio_url=audio_url
         )
     
@@ -309,16 +340,19 @@ def translate_song(request: SongRequest):
 @app.post("/translate-text")
 def translate_text(request: TranslationRequest):
     """
-    Translate manually pasted Spanish text to selected language
+    Translate manually pasted text to selected language (auto-detects source language)
     """
     try:
         spanish_text = request.spanish_text
         
         if not spanish_text:
-            raise HTTPException(status_code=400, detail="Spanish text is required")
+            raise HTTPException(status_code=400, detail="Text is required")
         
-        # Translate to selected target language from source language
-        translated_text = translate_with_deepl(spanish_text, source_lang=request.source_language, target_lang=request.target_language)
+        # Auto-detect the language of the text
+        detected_lang = detect_language(spanish_text)
+        
+        # Translate to selected target language from detected language
+        translated_text = translate_with_deepl(spanish_text, source_lang=detected_lang, target_lang=request.target_language)
         
         # Align lines
         word_pairs = align_words(spanish_text, translated_text)
@@ -326,7 +360,8 @@ def translate_text(request: TranslationRequest):
         return {
             "spanish_lyrics": spanish_text,
             "english_lyrics": translated_text,
-            "word_pairs": word_pairs
+            "word_pairs": word_pairs,
+            "detected_language": detected_lang
         }
     
     except HTTPException:

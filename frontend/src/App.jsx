@@ -6,11 +6,12 @@ function App() {
   const [artist, setArtist] = useState('');
   const [title, setTitle] = useState('');
   const [manualSpanish, setManualSpanish] = useState('');
-  const [sourceLanguage, setSourceLanguage] = useState('ES');
   const [targetLanguage, setTargetLanguage] = useState('EN-US');
   
   const [spanishLyrics, setSpanishLyrics] = useState('');
   const [englishLyrics, setEnglishLyrics] = useState('');
+  const [wordPairs, setWordPairs] = useState([]); // line-by-line pairs
+  const [sourceLanguage, setSourceLanguage] = useState('ES'); // Auto-detected from API
   const [audioUrl, setAudioUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -65,8 +66,10 @@ function App() {
       }
 
       const data = await response.json();
+      setSourceLanguage(data.detected_language);
       setSpanishLyrics(data.spanish_lyrics);
       setEnglishLyrics(data.english_lyrics);
+      setWordPairs(data.word_pairs);
       setAudioUrl(data.audio_url);
     } catch (err) {
       setError(`Error: ${err.message}`);
@@ -98,8 +101,10 @@ function App() {
       }
 
       const data = await response.json();
+      setSourceLanguage(data.detected_language);
       setSpanishLyrics(data.spanish_lyrics);
       setEnglishLyrics(data.english_lyrics);
+      setWordPairs(data.word_pairs);
       setAudioUrl(null);
     } catch (err) {
       setError(`Error: ${err.message}`);
@@ -168,28 +173,7 @@ function App() {
           {/* Language Selection */}
           <div className="language-selectors">
             <div className="language-selector">
-              <label htmlFor="source-lang">From:</label>
-              <select 
-                id="source-lang"
-                value={sourceLanguage} 
-                onChange={(e) => setSourceLanguage(e.target.value)}
-                disabled={loading}
-              >
-                <option value="ES">Spanish</option>
-                <option value="EN-US">English (US)</option>
-                <option value="PT-BR">Portuguese (Brazil)</option>
-                <option value="PT">Portuguese (Portugal)</option>
-                <option value="FR">French</option>
-                <option value="DE">German</option>
-                <option value="IT">Italian</option>
-                <option value="NL">Dutch</option>
-                <option value="PL">Polish</option>
-                <option value="RU">Russian</option>
-                <option value="JA">Japanese</option>
-                <option value="ZH">Chinese</option>
-                <option value="KO">Korean</option>
-                <option value="TR">Turkish</option>
-              </select>
+              <label>From: <strong>{getLanguageName(sourceLanguage)}</strong></label>
             </div>
 
             <div className="language-selector">
