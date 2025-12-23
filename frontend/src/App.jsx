@@ -15,6 +15,8 @@ function App() {
   const [audioUrl, setAudioUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fallbackUrl, setFallbackUrl] = useState('');
+  const [infoMessage, setInfoMessage] = useState('');
   
   // Refs for synced scrolling
   const spanishColRef = useRef(null);
@@ -43,40 +45,68 @@ function App() {
   }, [spanishLyrics, englishLyrics]);
 
   const handleSearchSong = async (e) => {
-    e.preventDefault();
-    
-    if (!artist.trim() || !title.trim()) {
-      setError('Please enter both artist and song title');
+  e.preventDefault();
+
+  if (!artist.trim() || !title.trim()) {
+    setError('Please enter both artist and song title');
+    return;
+  }
+
+  setLoading(true);
+  setError('');
+  setFallbackUrl('');
+  setInfoMessage('');
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/translate-song`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        artist,
+        title,
+        source_language: sourceLanguage,
+        target_language: targetLanguage
+      }),
+    });
+
+    // guard against non-200 responses
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail?.message || errorData.detail || 'Failed to fetch song');
+    }
+
+    const data = await response.json();
+
+    // ✅ Handle not_found cleanly
+    if (data.status === 'not_found') {
+      setSpanishLyrics('');
+      setEnglishLyrics('');
+      setWordPairs([]);
+      setAudioUrl(data.audio_url || null);
+
+      setFallbackUrl(data.fallback_url || '');
+      setInfoMessage(data.message || 'Lyrics not available. Try opening the link or paste lyrics.');
+
+      // Optional UX: auto-switch to Paste tab so user can paste lyrics immediately
+      setActiveTab('paste');
+
       return;
     }
 
-    setLoading(true);
-    setError('');
+    // ✅ Normal success
+    setSourceLanguage(data.detected_language);
+    setSpanishLyrics(data.spanish_lyrics || '');
+    setEnglishLyrics(data.english_lyrics || '');
+    setWordPairs(data.word_pairs || []);
+    setAudioUrl(data.audio_url || null);
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/translate-song`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ artist, title, source_language: sourceLanguage, target_language: targetLanguage }),
-      });
+  } catch (err) {
+    setError(`Error: ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to fetch song');
-      }
-
-      const data = await response.json();
-      setSourceLanguage(data.detected_language);
-      setSpanishLyrics(data.spanish_lyrics);
-      setEnglishLyrics(data.english_lyrics);
-      setWordPairs(data.word_pairs);
-      setAudioUrl(data.audio_url);
-    } catch (err) {
-      setError(`Error: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleTranslateManual = async (e) => {
     e.preventDefault();
@@ -114,11 +144,15 @@ function App() {
   };
 
   const clearResults = () => {
-    setSpanishLyrics('');
-    setEnglishLyrics('');
-    setAudioUrl(null);
-    setError('');
+  setSpanishLyrics('');
+  setEnglishLyrics('');
+  setWordPairs([]);
+  setAudioUrl(null);
+  setError('');
+  setFallbackUrl('');
+  setInfoMessage('');
   };
+
 
   // Split into lines for display
   const spanishLines = spanishLyrics.split('\n');
@@ -233,11 +267,11 @@ function App() {
           {activeTab === 'paste' && (
             <form onSubmit={handleTranslateManual} className="paste-form">
               <div className="form-group">
-                <label>Paste {getLanguageName(sourceLanguage)} Lyrics</label>
+                <label>Paste lyrics</label>
                 <textarea
                   value={manualSpanish}
                   onChange={(e) => setManualSpanish(e.target.value)}
-                  placeholder={`Paste your ${getLanguageName(sourceLanguage).toLowerCase()} lyrics here...`}
+                  placeholder="Paste lyrics here..."
                   rows="8"
                   disabled={loading}
                 />
@@ -249,6 +283,19 @@ function App() {
           )}
 
           {error && <div className="error-message">{error}</div>}
+          {infoMessage && (
+            <div className="info-message">
+              {infoMessage}
+              {fallbackUrl && (
+                <div style={{ marginTop: '8px' }}>
+                  <a href={fallbackUrl} target="_blank" rel="noopener noreferrer">
+                    Open Genius link
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
 
         {/* Results Section */}

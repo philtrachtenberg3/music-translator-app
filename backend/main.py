@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 import re
 from typing import List, Dict, Optional
+import unicodedata
 
 load_dotenv()
 
@@ -42,11 +43,63 @@ class WordAlignment(BaseModel):
     english: str
 
 class TranslationResponse(BaseModel):
+    status: str = "ok"  # "ok" or "not_found"
     spanish_lyrics: str
     english_lyrics: str
     word_pairs: List[WordAlignment]
     detected_language: str
     audio_url: Optional[str] = None
+    fallback_url: Optional[str] = None
+    message: Optional[str] = None
+
+def _strip_diacritics(s: str) -> str:
+    return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c))
+
+def _strip_features(title: str) -> str:
+    return re.sub(r'[\(\[]\s*(feat\.?|with|con|remix|version|vers\.)[^)\]]*[\)\]]', '', title, flags=re.I).strip()
+
+def get_lyrics_from_lyrics_ovh(artist: str, title: str) -> Optional[str]:
+    variants = [
+        (artist, title),
+        (artist, _strip_features(title)),
+        (_strip_diacritics(artist), _strip_diacritics(title)),
+        (_strip_diacritics(artist), _strip_diacritics(_strip_features(title))),
+    ]
+
+    for a, t in variants:
+        if not a or not t:
+            continue
+        url = f"https://api.lyrics.ovh/v1/{requests.utils.quote(a)}/{requests.utils.quote(t)}"
+        try:
+            r = requests.get(url, timeout=8)
+            if r.status_code == 200:
+                data = r.json()
+                lyr = (data.get("lyrics") or "").strip()
+                if lyr:
+                    return lyr
+        except requests.RequestException:
+            continue
+
+    return None
+
+def get_genius_song_url(artist: str, title: str) -> Optional[str]:
+    """Genius API lookup for a song URL (NO scraping)."""
+    if not GENIUS_API_TOKEN:
+        return None
+    try:
+        headers = {"Authorization": f"Bearer {GENIUS_API_TOKEN}"}
+        search_url = "https://api.genius.com/search"
+        params = {"q": f"{title} {artist}"}
+        r = requests.get(search_url, params=params, headers=headers, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        hits = data.get("response", {}).get("hits", [])
+        if not hits:
+            return None
+        return hits[0]["result"]["url"]
+    except Exception as e:
+        print(f"Error getting Genius URL: {e}")
+        return None
 
 def detect_language(text: str) -> str:
     """
@@ -73,67 +126,6 @@ def detect_language(text: str) -> str:
             return 'ES'
     except:
         return 'ES'  # Default to Spanish
-
-def get_lyrics_from_genius(artist: str, title: str) -> Optional[str]:
-    """Fetch lyrics from Genius API"""
-    try:
-        headers = {"Authorization": f"Bearer {GENIUS_API_TOKEN}"}
-        search_url = "https://api.genius.com/search"
-        params = {"q": f"{title} {artist}"}
-        
-        response = requests.get(search_url, params=params, headers=headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        
-        if not data["response"]["hits"]:
-            return None
-        
-        # Get the first matching song
-        song_url = data["response"]["hits"][0]["result"]["url"]
-        
-        # Fetch the lyrics page with User-Agent to avoid 403 blocking
-        page_headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        page_response = requests.get(song_url, headers=page_headers, timeout=10)
-        page_response.raise_for_status()
-        
-        # Parse HTML to extract lyrics
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(page_response.content, 'html.parser')
-        
-        # Genius stores lyrics in div tags with data-lyrics-container attribute
-        lyrics_divs = soup.find_all('div', {'data-lyrics-container': 'true'})
-        
-        if not lyrics_divs:
-            return None
-        
-        # Extract lyrics while preserving line breaks
-        all_lyrics = []
-        for div in lyrics_divs:
-            # Get text and preserve line breaks from <br> tags
-            for br in div.find_all('br'):
-                br.replace_with('\n')
-            text = div.get_text()
-            all_lyrics.append(text)
-        
-        lyrics = "\n".join(all_lyrics)
-        
-        # Clean up common Genius metadata patterns
-        # Remove lines that look like "XX ContributorsDate La Vuelta Lyrics..."
-        lines = lyrics.split('\n')
-        cleaned_lines = []
-        for line in lines:
-            # Skip lines that start with numbers followed by "Contributors" or "Lyrics"
-            if not (line and line[0].isdigit() and ('Contributors' in line or 'Letra de' in line or 'Lyrics' in line)):
-                cleaned_lines.append(line)
-        
-        lyrics = '\n'.join(cleaned_lines).strip()
-        return lyrics
-    
-    except Exception as e:
-        print(f"Error fetching lyrics from Genius: {e}")
-        return None
 
 def translate_with_deepl(text: str, source_lang: str = "ES", target_lang: str = "EN-US") -> str:
     """Translate text using DeepL API"""
@@ -301,38 +293,48 @@ def read_root():
 
 @app.post("/translate-song", response_model=TranslationResponse)
 def translate_song(request: SongRequest):
-    """
-    Main endpoint: fetch lyrics, auto-detect language, and translate them
-    """
     try:
-        # Fetch lyrics from Genius
-        spanish_lyrics = get_lyrics_from_genius(request.artist, request.title)
-        
-        if not spanish_lyrics:
-            raise HTTPException(status_code=404, detail="Lyrics not found on Genius")
-        
-        # Auto-detect the language of the lyrics
-        detected_lang = detect_language(spanish_lyrics)
-        
-        # Translate to selected target language from detected language
-        translated_lyrics = translate_with_deepl(spanish_lyrics, source_lang=detected_lang, target_lang=request.target_language)
-        
-        # Align lines
-        word_pairs = align_words(spanish_lyrics, translated_lyrics)
-        
-        # Get Spotify audio URL
+        # 1) Try lyrics.ovh first (safe + fast)
+        lyrics = get_lyrics_from_lyrics_ovh(request.artist, request.title)
+
+        # 2) If not found, return a clean fallback payload (200 OK)
+        if not lyrics:
+            genius_url = get_genius_song_url(request.artist, request.title) \
+                or f"https://genius.com/search?q={requests.utils.quote(request.artist + ' ' + request.title)}"
+
+            audio_url = get_spotify_audio_url(request.artist, request.title)
+
+            return TranslationResponse(
+                status="not_found",
+                spanish_lyrics="",
+                english_lyrics="",
+                word_pairs=[],
+                detected_language="",
+                audio_url=audio_url,
+                fallback_url=genius_url,
+                message="Lyrics not available from supported sources. Open the Genius link or paste lyrics to translate."
+            )
+
+        # 3) Detect language and translate
+        detected_lang = detect_language(lyrics)
+        translated_lyrics = translate_with_deepl(
+            lyrics,
+            source_lang=detected_lang,
+            target_lang=request.target_language
+        )
+
+        word_pairs = align_words(lyrics, translated_lyrics)
         audio_url = get_spotify_audio_url(request.artist, request.title)
-        
+
         return TranslationResponse(
-            spanish_lyrics=spanish_lyrics,
+            status="ok",
+            spanish_lyrics=lyrics,
             english_lyrics=translated_lyrics,
             word_pairs=word_pairs,
             detected_language=detected_lang,
             audio_url=audio_url
         )
-    
-    except HTTPException:
-        raise
+
     except Exception as e:
         print(f"Error in translate_song: {e}")
         raise HTTPException(status_code=500, detail=str(e))
